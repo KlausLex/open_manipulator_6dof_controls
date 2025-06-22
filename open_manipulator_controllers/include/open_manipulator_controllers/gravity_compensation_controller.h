@@ -44,6 +44,7 @@
 #include <ros/ros.h>
 #include <ros/time.h>
 #include <urdf/model.h>
+#include <sensor_msgs/JointState.h>
 
 namespace open_manipulator_controllers
 {
@@ -76,6 +77,9 @@ class GravityCompensationController
 
   // KDL solver
   boost::scoped_ptr<KDL::ChainDynParam> MCG_solver_;
+
+  ros::Publisher joint_state_pub_;
+
 };
 }  // namespace open_manipulator_controllers
 #endif  // OPEN_MANIPULATOR_CONTROLLERS_GRAVITY_COMPENSATION_CONTROLLER_H

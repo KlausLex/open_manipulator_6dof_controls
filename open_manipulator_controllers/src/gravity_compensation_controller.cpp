@@ -28,9 +28,7 @@ bool GravityCompensationController::init(
       robot_hardware->get<hardware_interface::EffortJointInterface>();
   if (effort_joint_interface_ == nullptr)
   {
-    ROS_ERROR(
-        "[GravityCompensationController] Could not get effort joint interface "
-        "from hardware!");
+    ROS_ERROR("[GravityCompensationController] Could not get effort joint interface from hardware!");
     return false;
   }
 
@@ -49,9 +47,7 @@ bool GravityCompensationController::init(
     }
     catch (const hardware_interface::HardwareInterfaceException& e)
     {
-      ROS_ERROR_STREAM(
-          "[GravityCompensationController] Could not get joint handle: "
-          << e.what());
+      ROS_ERROR_STREAM("[GravityCompensationController] Could not get joint handle: " << e.what());
       return false;
     }
   }
@@ -80,8 +76,7 @@ bool GravityCompensationController::init(
   }
   if (!kdl_tree_.getChain(root_name_, tip_name_, kdl_chain_))
   {
-    ROS_ERROR(
-        "[GravityCompensationController] Could not get KDL chain from tree");
+    ROS_ERROR("[GravityCompensationController] Could not get KDL chain from tree");
     return false;
   }
 
@@ -90,24 +85,48 @@ bool GravityCompensationController::init(
   tau_.resize(kdl_chain_.getNrOfJoints());
   G_.resize(kdl_chain_.getNrOfJoints());
 
+  ROS_ERROR("num joints: %d", kdl_chain_.getNrOfJoints());
+
+
   // Gravity torque
   KDL::Vector g(0.0, 0.0, -9.81);
   grav_ = g;
   MCG_solver_.reset(new KDL::ChainDynParam(kdl_chain_, grav_));
+
+  // Initialize publisher
+  joint_state_pub_ = node_handle.advertise<sensor_msgs::JointState>("traj_joint_states", 10);
 
   return true;
 }
 
 void GravityCompensationController::starting(const ros::Time& time) {}
 
-void GravityCompensationController::update(const ros::Time& time,
-                                           const ros::Duration& period)
+void GravityCompensationController::update(const ros::Time& time, const ros::Duration& period)
 {
+  ROS_ERROR("Running update");
+  sensor_msgs::JointState joint_state_msg;
+  joint_state_msg.header.stamp = time;
+  joint_state_msg.name = joint_names_;
+  joint_state_msg.position.resize(joint_names_.size());
+
+  ROS_ERROR("Getting poitions");
+  ROS_ERROR("joint sizes: %d", joint_names_.size());
+  ROS_ERROR("qi: %d, %d", q_.rows(), q_.columns());
   // Get the current joint positions
-  for (size_t i = 0; i < kdl_chain_.getNrOfJoints(); i++)
+  for (size_t i = 0; i < q_.rows(); i++)
   {
+    ROS_ERROR("wotking on: %d", i);
     q_(i) = effort_joint_handles_[i].getPosition();
+    ROS_ERROR("setting message on: %d", i);
+    joint_state_msg.position[i] = q_(i);
   }
+  joint_state_msg.position[joint_names_.size()-1] = effort_joint_handles_[joint_names_.size()-1].getPosition();
+
+  ROS_ERROR("qi: %d, %d", q_.rows(), q_.columns());
+  ROS_ERROR("Current joint positions: %f %f %f %f %f %f %f", q_(0), q_(1), q_(2), q_(3), q_(4), q_(5));
+
+  // Publish joint states
+  joint_state_pub_.publish(joint_state_msg);
 
   // Compute the gravity torque
   MCG_solver_->JntToGravity(q_, G_);
@@ -122,7 +141,6 @@ void GravityCompensationController::update(const ros::Time& time,
   for (size_t i = 0; i < kdl_chain_.getNrOfJoints(); i++)
   {
     effort_joint_handles_[i].setCommand(tau_(i));
-    ROS_INFO_STREAM("Sending torque " << i << " " << tau_(i));
   }
 }
 
